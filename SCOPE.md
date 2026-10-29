@@ -56,13 +56,19 @@ All three are hard `require`s, so Flarum's dependency check enforces them.
    is unreachable, so the page always answers inside PHP's 30 s limit.
 7. **Guide** — translatable plain-words help per section.
 
-## Phase 2 — Google Search Console (scope only)
+## Phase 2 — Google Search Console — built
 
-- Connect with a **service account** JSON key: stored encrypted with Flarum's encrypter, never
-  serialised to any frontend, only "connected as …@….iam.gserviceaccount.com" shown. JWT
-  (RS256) signed server-side with `openssl_sign`, exchanged at `oauth2.googleapis.com/token`,
-  token cached until expiry. Scopes: `webmasters.readonly`; `indexing` only if the Indexing API
-  is used (Google limits it to job postings / livestreams, so probably not).
+- Connect with a **service account** JSON key. Flarum 2 has no application key or encrypter, so
+  secrets (Google key, PageSpeed key, Anthropic key) are AES-256-GCM encrypted in a
+  `surveyor_secrets` table with a 32-byte key in `storage/surveyor.key` (0600, created on first
+  use) — never in `settings`, which Flarum sends to the admin page. Never returned to a browser;
+  only "connected as …@….iam.gserviceaccount.com". Key files whose `token_uri` is not
+  `https://oauth2.googleapis.com/token` are refused. JWT (RS256) signed server-side with
+  `openssl_sign`, exchanged for a token cached until two minutes before expiry, per scope.
+  Scopes: `webmasters.readonly` (analytics, URL Inspection); `webmasters` only for sitemap
+  submission. The Indexing API is not used (Google limits it to job postings and livestreams).
+- All outside HTTP goes through an injectable `Http\ApiClient` (tests use a fake; no test reaches
+  the network). Every call is logged (`surveyor_api_log`) and failures pause the service.
 - Search analytics per page and per query (clicks, impressions, CTR, position), daily rows
   stored with history; a scheduled pull with a per-day quota budget and cached failures.
 - URL Inspection for audited pages (indexed verdict, last crawl, canonical Google chose,
@@ -72,21 +78,30 @@ All three are hard `require`s, so Flarum's dependency check enforces them.
   previous 28 days); High/Medium/Low potential, each with a recommended action that links to
   the right place (FoF SEO's description field, the page, Detour).
 
-## Phase 3 — performance, regressions, internal links, AI (scope only)
+## Phase 3 — performance, regressions, internal links, AI — built
 
 - **PageSpeed Insights / Lighthouse / Core Web Vitals / CrUX** per page with history (Google API
   key; quota-aware queue; mobile + desktop; LCP, INP, CLS; failures cached).
 - **Regression guard**: compare each page's audit score, Search Console visibility and
   performance with its last healthy measurement and flag drops (with thresholds), on the
-  dashboard and optionally by email to admins.
+  dashboard and in its own section (no emails).
 - **Internal links analysis**: orphan pages (in the sitemap, no inbound links), pages with few
   inbound links, deep pages; an optional "related discussions" block for guests (off by default,
   cached, measured for zero added queries when off).
-- **Optional AI descriptions**: fof/seo already stores a per-object description in `seo_meta`
-  (`object_type` + `object_id`, `description`, with `auto_update_data`). Surveyor would write a
-  suggested description there (setting `auto_update_data = 0` so fof/seo keeps it), only after
-  the admin accepts it, never required, provider configurable. No competing field, so no fof/seo
-  PR is needed for storage; a PR would only be needed if fof/seo should expose a hook for it.
+- **Optional AI descriptions**: fof/seo stores a per-object description in `seo_meta`
+  (`object_type` + `object_id`, `description`, `auto_update_data`). `auto_update_data = 0` means
+  written by hand in FoF SEO: never replaced. Otherwise a previewed (and editable) suggestion is
+  written there with `auto_update_data = 0` (or fof/seo's next reply would overwrite it); the
+  previous value is kept for Undo, which restores it only if nobody has changed it since.
+  Provider interface; Anthropic Messages API first (`claude-haiku-5-5`, thinking off,
+  `max_tokens` 200, 160 characters, first post cut to 6 000 characters), over raw HTTPS through
+  the injectable client (no SDK dependency on every forum). Caps per day, per minute, tokens per
+  month; refusals and errors are reported, never saved. No fof/seo PR needed.
+- **Related discussions block**: `Extend\Conditional::whenSetting(related_enabled)` applies
+  `Links\RelatedBlock` (forum JS + CSS + a `surveyorRelated` attribute on the discussion *show*
+  endpoint only). Off: nothing loaded. On: one query (guest-visible discussions sharing a tag,
+  ranked in PHP by shared tags, #hashtags, title words) per discussion per six hours, cached.
+  Saving the setting marks the frontend assets dirty so Flarum rebuilds them.
 
 ## Not doing
 
