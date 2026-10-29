@@ -5,6 +5,8 @@ namespace Ernestdefoe\Surveyor\Api;
 use Ernestdefoe\Surveyor\Crawl\Auditor;
 use Ernestdefoe\Surveyor\Crawl\Scorer;
 use Ernestdefoe\Surveyor\Diagnostics\Checks;
+use Ernestdefoe\Surveyor\Google\Opportunities;
+use Ernestdefoe\Surveyor\Guard\Regressions;
 use Ernestdefoe\Surveyor\IndexNow\Sender;
 use Ernestdefoe\Surveyor\Settings;
 use Illuminate\Contracts\Cache\Repository as Cache;
@@ -23,7 +25,30 @@ class SummaryController extends Controller
         protected Settings $settings,
         protected Sender $sender,
         protected Cache $cache,
+        protected Regressions $regressions,
     ) {
+    }
+
+    /** @return array<string, mixed>|null clicks and opportunities, once Search Console has data */
+    private function search(): ?array
+    {
+        $totals = $this->db->table('surveyor_search_pages')->selectRaw('COUNT(*) as pages, SUM(clicks) as clicks, SUM(prev_clicks) as prev_clicks')->first();
+
+        if (! $totals || (int) $totals->pages === 0) {
+            return null;
+        }
+
+        $high = 0;
+        $rows = $this->db->table('surveyor_search_pages')
+            ->where(fn ($q) => $q->where('impressions', '>=', Opportunities::MIN_IMPRESSIONS_STRIKING)->orWhere('prev_clicks', '>=', Opportunities::MIN_PREV_CLICKS))
+            ->limit(5000)->get();
+        foreach ($rows as $row) {
+            foreach (Opportunities::find($row) as $o) {
+                $high += $o['priority'] === 'high' ? 1 : 0;
+            }
+        }
+
+        return ['clicks' => (int) $totals->clicks, 'prevClicks' => (int) $totals->prev_clicks, 'highOpportunities' => $high];
     }
 
     /** @return array<string, mixed> */
@@ -86,6 +111,8 @@ class SummaryController extends Controller
                 'backoff' => $this->sender->backoffUntil() !== null,
             ],
             'missing' => $this->db->table('detour_missing')->where('ignored', false)->count(),
+            'search' => $this->search(),
+            'regressions' => count($this->regressions->all()),
             'schedulerTick' => $tick ? date(DATE_ATOM, $tick) : null,
             'frequency' => $this->settings->get('audit_frequency'),
         ];

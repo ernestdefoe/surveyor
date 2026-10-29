@@ -5,7 +5,10 @@ namespace Ernestdefoe\Surveyor\Diagnostics;
 use Carbon\Carbon;
 use Ernestdefoe\Surveyor\Crawl\Analyzer;
 use Ernestdefoe\Surveyor\Crawl\Robots;
+use Ernestdefoe\Surveyor\Google\SearchSync;
+use Ernestdefoe\Surveyor\Http\ApiLog;
 use Ernestdefoe\Surveyor\Http\Fetcher;
+use Ernestdefoe\Surveyor\Security\Secrets;
 use Ernestdefoe\Surveyor\Http\Page;
 use Ernestdefoe\Surveyor\Settings;
 use Ernestdefoe\Surveyor\Site;
@@ -22,7 +25,11 @@ use XMLReader;
  */
 class Checks
 {
-    public const TABLES = ['surveyor_runs', 'surveyor_pages', 'surveyor_links', 'surveyor_scores', 'surveyor_rules', 'surveyor_indexnow_queue', 'surveyor_indexnow_log'];
+    public const TABLES = [
+        'surveyor_runs', 'surveyor_pages', 'surveyor_links', 'surveyor_scores', 'surveyor_rules', 'surveyor_indexnow_queue', 'surveyor_indexnow_log',
+        'surveyor_secrets', 'surveyor_api_log', 'surveyor_search_pages', 'surveyor_search_queries', 'surveyor_search_days', 'surveyor_search_history',
+        'surveyor_inspections', 'surveyor_speed', 'surveyor_speed_queue', 'surveyor_ai_descriptions',
+    ];
 
     /** Extensions that do a job Surveyor or its companions already do. */
     public const CONFLICTS = ['blenderrus-indexnow' => 'indexnow', 'v17development-seo' => 'seo'];
@@ -41,6 +48,9 @@ class Checks
         protected Cache $cache,
         protected ApplicationInfoProvider $info,
         protected Analyzer $analyzer,
+        protected Secrets $secrets,
+        protected SearchSync $sync,
+        protected ApiLog $log,
     ) {
     }
 
@@ -89,6 +99,8 @@ class Checks
         $checks[] = $this->scheduler();
         $checks[] = $this->check('queue', 'info', ['driver' => $this->queueDriver()]);
         $checks[] = $reachable || ! $this->settings->indexNowActive() ? $this->indexNow() : $this->check('indexnow', 'warning', ['url' => $this->site->url('/'.$this->settings->indexNowKey().'.txt'), 'status' => 0]);
+
+        $checks = array_merge($checks, $this->services());
 
         // One listing, not one query per table. Names come back with the table prefix.
         $prefix = $this->db->getTablePrefix();
@@ -194,6 +206,50 @@ class Checks
         return $page->status === 200 && trim($page->body) === $key
             ? $this->check('indexnow', 'pass', ['url' => $url])
             : $this->check('indexnow', 'warning', ['url' => $url, 'status' => $page->status]);
+    }
+
+    /**
+     * Search Console, PageSpeed and the AI provider, from what Surveyor
+     * already knows (its log and pauses): no extra calls to them.
+     *
+     * @return list<array{id: string, level: string, params: array<string, string|int>}>
+     */
+    private function services(): array
+    {
+        $checks = [];
+        $last = fn (string $service) => $this->db->table('surveyor_api_log')->where('service', $service)->orderByDesc('id')->first(['status', 'message']);
+
+        if (! $this->secrets->has(Secrets::GOOGLE)) {
+            $checks[] = $this->check('google', 'info');
+        } elseif (! $this->sync->property()) {
+            $checks[] = $this->check('google_property', 'warning');
+        } elseif ($this->log->pausedUntil('google') !== null) {
+            $checks[] = $this->check('google', 'warning', ['error' => (string) ($last('google')->message ?? '')]);
+        } else {
+            $checks[] = $this->check('google', 'pass', ['email' => (string) $this->secrets->label(Secrets::GOOGLE)]);
+        }
+
+        $checks[] = $this->log->pausedUntil('pagespeed') !== null
+            ? $this->check('pagespeed', 'warning', ['error' => (string) ($last('pagespeed')->message ?? '')])
+            : $this->check('pagespeed', $this->secrets->has(Secrets::PAGESPEED) ? 'pass' : 'info');
+
+        if (! $this->settings->on('ai_enabled')) {
+            $checks[] = $this->check('ai', 'info');
+        } elseif (! $this->secrets->has(Secrets::ANTHROPIC) || $this->log->pausedUntil('ai') !== null) {
+            $checks[] = $this->check('ai', 'warning', ['error' => (string) ($last('ai')->message ?? '')]);
+        } else {
+            $checks[] = $this->check('ai', 'pass');
+        }
+
+        // The key that encrypts the stored keys: present, and not readable by everyone.
+        $file = $this->secrets->keyFile();
+        $checks[] = ! is_file($file)
+            ? $this->check('secrets_key', 'info', ['file' => $file])
+            : ((fileperms($file) & 0o004) ? $this->check('secrets_key', 'warning', ['file' => $file]) : $this->check('secrets_key', 'pass', ['file' => $file]));
+
+        $checks[] = $this->check('related', $this->settings->on('related_enabled') ? 'pass' : 'info');
+
+        return $checks;
     }
 
     private function queueDriver(): string

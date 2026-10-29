@@ -1,7 +1,21 @@
 {
     "name": "ernestdefoe/surveyor",
-    "description": "An SEO workspace for Flarum that works alongside FoF SEO, FoF Sitemap and Detour: a polite site audit with scores and history, broken-link recovery through Detour redirects, IndexNow submissions, URL rules and diagnostics.",
-    "keywords": ["flarum", "seo", "audit", "site audit", "broken links", "indexnow", "sitemap", "robots", "crawler"],
+    "description": "An SEO workspace for Flarum that works alongside FoF SEO, FoF Sitemap and Detour: a polite site audit with scores and history, broken-link recovery through Detour, Google Search Console with opportunities, PageSpeed and Core Web Vitals, a regression guard, internal-link analysis, IndexNow, and optional AI meta descriptions.",
+    "keywords": [
+        "flarum",
+        "seo",
+        "audit",
+        "site audit",
+        "broken links",
+        "indexnow",
+        "sitemap",
+        "robots",
+        "crawler",
+        "search console",
+        "pagespeed",
+        "core web vitals",
+        "internal links"
+    ],
     "type": "flarum-extension",
     "license": "MIT",
     "authors": [
@@ -25,7 +39,9 @@
         "flarum/core": "^2.0",
         "fof/seo": "^4.0.0-beta.16",
         "fof/sitemap": "^3.0",
-        "ernestdefoe/detour": "^1.0"
+        "ernestdefoe/detour": "^1.0",
+        "ext-openssl": "*",
+        "ext-json": "*"
     },
     "extra": {
         "flarum-extension": {

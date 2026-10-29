@@ -19,6 +19,26 @@ final class Settings
         'keep_runs' => '12',
         'indexnow_enabled' => '0',
         'indexnow_key' => '',
+        // Search Console
+        'google_property' => '',
+        // daily | weekly | off
+        'google_refresh' => 'daily',
+        'google_refreshed_at' => '',
+        'inspect_daily' => '200',
+        // PageSpeed Insights
+        'speed_daily' => '25',
+        // off | weekly
+        'speed_schedule' => 'off',
+        'speed_pages' => '10',
+        'speed_scheduled_at' => '',
+        // AI descriptions
+        'ai_enabled' => '0',
+        'ai_model' => 'claude-haiku-5-5',
+        'ai_daily' => '50',
+        'ai_monthly_tokens' => '500000',
+        // Related discussions under the first post
+        'related_enabled' => '0',
+        'related_count' => '5',
     ];
 
     public const FREQUENCIES = ['daily' => 1, 'weekly' => 7, 'monthly' => 30, 'manual' => 0];
@@ -46,6 +66,16 @@ final class Settings
     public function int(string $name, int $min, int $max): int
     {
         return max($min, min($max, (int) $this->get($name)));
+    }
+
+    public function on(string $name): bool
+    {
+        return in_array($this->get($name), ['1', 'true'], true);
+    }
+
+    public function locale(): string
+    {
+        return (string) $this->settings->get('default_locale', 'en');
     }
 
     public function maxPages(): int

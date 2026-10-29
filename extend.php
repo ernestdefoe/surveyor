@@ -6,9 +6,12 @@ use Ernestdefoe\Surveyor\IndexNow;
 use Ernestdefoe\Surveyor\Rules\Rule;
 use Ernestdefoe\Surveyor\Rules\RuleSet;
 use Ernestdefoe\Surveyor\Settings;
+use Ernestdefoe\Surveyor\Links\RelatedBlock;
 use Flarum\Discussion\Event as DiscussionEvent;
 use Flarum\Extend;
+use Flarum\Frontend\AssetManager;
 use Flarum\Post\Event as PostEvent;
+use Flarum\Settings\Event\Saved as SettingsSaved;
 use Illuminate\Console\Scheduling\Event;
 
 $settings = new Extend\Settings();
@@ -18,8 +21,9 @@ foreach (Settings::DEFAULTS as $key => $value) {
 }
 
 return [
-    // Admin only. The forum loads nothing of Surveyor's: no JS, no CSS, no
-    // payload. The workspace itself is a lazy chunk, fetched when its page opens.
+    // Admin. The forum loads nothing of Surveyor's (no JS, no CSS, no payload)
+    // unless the related-discussions block is switched on, below. The
+    // workspace's sections are lazy chunks, fetched when each is opened.
     (new Extend\Frontend('admin'))
         ->js(__DIR__.'/js/dist/admin.js')
         ->jsDirectory(__DIR__.'/js/dist/admin')
@@ -55,7 +59,29 @@ return [
         })
         ->schedule(Console\IndexNowCommand::class, function (Event $event): void {
             $event->everyFiveMinutes()->withoutOverlapping();
+        })
+        ->command(Console\GoogleCommand::class)
+        ->schedule(Console\GoogleCommand::class, function (Event $event): void {
+            $event->hourly()->withoutOverlapping();
+        })
+        ->command(Console\SpeedCommand::class)
+        ->schedule(Console\SpeedCommand::class, function (Event $event): void {
+            $event->everyMinute()->withoutOverlapping();
         }),
+
+    // Switching the related-discussions block on or off changes which scripts
+    // the forum loads: have Flarum rebuild them on the next request.
+    (new Extend\Event())
+        ->listen(SettingsSaved::class, function (SettingsSaved $event): void {
+            if (array_key_exists(Settings::key('related_enabled'), $event->settings)) {
+                resolve(AssetManager::class)->markDirty();
+            }
+        }),
+
+    // Off by default. Only while it is on does the forum load anything of
+    // Surveyor's: a small script, and a cached list on the discussion API.
+    (new Extend\Conditional())
+        ->whenSetting(Settings::key('related_enabled'), '1', RelatedBlock::class),
 
     // The IndexNow key file: /{key}.txt, below the forum's folder.
     (new Extend\Routes('forum'))
@@ -86,5 +112,28 @@ return [
         ->patch('/surveyor/rules/{id:\d+}', 'surveyor.rules.update', Api\RulesController::class)
         ->delete('/surveyor/rules/{id:\d+}', 'surveyor.rules.delete', Api\RulesController::class)
         ->post('/surveyor/rules/test', 'surveyor.rules.test', Api\RulesController::class)
-        ->get('/surveyor/diagnostics', 'surveyor.diagnostics.run', Api\DiagnosticsController::class),
+        ->get('/surveyor/diagnostics', 'surveyor.diagnostics.run', Api\DiagnosticsController::class)
+        ->get('/surveyor/search', 'surveyor.search.show', Api\SearchController::class)
+        ->post('/surveyor/search/connect', 'surveyor.search.connect', Api\SearchController::class)
+        ->post('/surveyor/search/disconnect', 'surveyor.search.disconnect', Api\SearchController::class)
+        ->post('/surveyor/search/refresh', 'surveyor.search.refresh', Api\SearchController::class)
+        ->get('/surveyor/search/pages', 'surveyor.search.pages', Api\SearchController::class)
+        ->get('/surveyor/search/queries', 'surveyor.search.queries', Api\SearchController::class)
+        ->post('/surveyor/search/inspect', 'surveyor.search.inspect', Api\SearchController::class)
+        ->get('/surveyor/search/sitemaps', 'surveyor.search.sitemaps', Api\SearchController::class)
+        ->post('/surveyor/search/sitemaps', 'surveyor.search.submit', Api\SearchController::class)
+        ->get('/surveyor/opportunities', 'surveyor.opportunities.list', Api\OpportunitiesController::class)
+        ->get('/surveyor/speed', 'surveyor.speed.show', Api\SpeedController::class)
+        ->post('/surveyor/speed', 'surveyor.speed.queue', Api\SpeedController::class)
+        ->post('/surveyor/speed/key', 'surveyor.speed.key', Api\SpeedController::class)
+        ->get('/surveyor/speed/history', 'surveyor.speed.history', Api\SpeedController::class)
+        ->get('/surveyor/regressions', 'surveyor.insights.regressions', Api\InsightsController::class)
+        ->get('/surveyor/internal-links', 'surveyor.insights.links', Api\InsightsController::class)
+        ->get('/surveyor/related', 'surveyor.insights.related', Api\InsightsController::class)
+        ->get('/surveyor/ai', 'surveyor.ai.show', Api\AiController::class)
+        ->post('/surveyor/ai/key', 'surveyor.ai.key', Api\AiController::class)
+        ->get('/surveyor/ai/candidates', 'surveyor.ai.candidates', Api\AiController::class)
+        ->post('/surveyor/ai/preview', 'surveyor.ai.preview', Api\AiController::class)
+        ->post('/surveyor/ai/apply', 'surveyor.ai.apply', Api\AiController::class)
+        ->post('/surveyor/ai/undo', 'surveyor.ai.undo', Api\AiController::class),
 ];

@@ -25,6 +25,8 @@ abstract class SurveyorTestCase extends TestCase
 
     protected FakeSubmitter $submitter;
 
+    protected FakeApiClient $http;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -55,8 +57,10 @@ abstract class SurveyorTestCase extends TestCase
         $container = $this->app()->getContainer();
         $this->fetcher = new FakeFetcher();
         $this->submitter = new FakeSubmitter();
+        $this->http = new FakeApiClient();
         $container->instance(Fetcher::class, $this->fetcher);
         $container->instance(Submitter::class, $this->submitter);
+        $container->instance(\Ernestdefoe\Surveyor\Http\ApiClient::class, $this->http);
     }
 
     protected function make(string $class): mixed

@@ -20,5 +20,8 @@ class Provider extends AbstractServiceProvider
         $this->container->singleton(RuleSet::class);
         $this->container->bind(Fetcher::class, GuzzleFetcher::class);
         $this->container->bind(Submitter::class, GuzzleSubmitter::class);
+        $this->container->bind(Http\ApiClient::class, Http\GuzzleApiClient::class);
+        $this->container->bind(Ai\Provider::class, Ai\AnthropicProvider::class);
+        $this->container->singleton(Security\Secrets::class);
     }
 }

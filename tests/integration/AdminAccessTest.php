@@ -18,6 +18,11 @@ class AdminAccessTest extends SurveyorTestCase
             ['GET', '/indexnow'], ['POST', '/indexnow/enable'], ['POST', '/indexnow/disable'], ['POST', '/indexnow/key'], ['POST', '/indexnow/submit'],
             ['GET', '/rules'], ['POST', '/rules'], ['PATCH', '/rules/1'], ['DELETE', '/rules/1'], ['POST', '/rules/test'],
             ['GET', '/diagnostics'],
+            ['GET', '/search'], ['POST', '/search/connect'], ['POST', '/search/disconnect'], ['POST', '/search/refresh'], ['GET', '/search/pages'],
+            ['GET', '/search/queries'], ['POST', '/search/inspect'], ['GET', '/search/sitemaps'], ['POST', '/search/sitemaps'],
+            ['GET', '/opportunities'], ['GET', '/speed'], ['POST', '/speed'], ['POST', '/speed/key'], ['GET', '/speed/history'],
+            ['GET', '/regressions'], ['GET', '/internal-links'], ['GET', '/related'],
+            ['GET', '/ai'], ['POST', '/ai/key'], ['GET', '/ai/candidates'], ['POST', '/ai/preview'], ['POST', '/ai/apply'], ['POST', '/ai/undo'],
         ];
     }
 
@@ -37,6 +42,8 @@ class AdminAccessTest extends SurveyorTestCase
         $this->assertSame([], $this->fetcher->requested);
         $this->assertSame(0, $this->database()->table('surveyor_runs')->count());
         $this->assertNull($this->database()->table('settings')->where('key', 'ernestdefoe-surveyor.indexnow_key')->value('value'));
+        $this->assertSame([], $this->http->calls);
+        $this->assertSame(0, $this->database()->table('surveyor_secrets')->count());
     }
 
     #[Test]

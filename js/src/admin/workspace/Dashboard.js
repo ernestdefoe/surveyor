@@ -64,6 +64,27 @@ export default class Dashboard extends Component {
             <div className="SurveyorTile-label">{t('dashboard.missing')}</div>
             <div className="SurveyorTile-value">{number(d.missing)}</div>
           </div>
+          <button className="SurveyorTile SurveyorTile--link" onclick={() => go('regressions')}>
+            <div className="SurveyorTile-label">{t('dashboard.regressions')}</div>
+            <div className="SurveyorTile-value">{number(d.regressions)}</div>
+          </button>
+          {d.search ? (
+            <>
+              <button className="SurveyorTile SurveyorTile--link" onclick={() => go('search')}>
+                <div className="SurveyorTile-label">{t('dashboard.search_clicks')}</div>
+                <div className="SurveyorTile-value">{number(d.search.clicks)}</div>
+              </button>
+              <button className="SurveyorTile SurveyorTile--link" onclick={() => go('opportunities')}>
+                <div className="SurveyorTile-label">{t('dashboard.opportunities')}</div>
+                <div className="SurveyorTile-value">{number(d.search.highOpportunities)}</div>
+              </button>
+            </>
+          ) : (
+            <button className="SurveyorTile SurveyorTile--link" onclick={() => go('search')}>
+              <div className="SurveyorTile-label">{t('dashboard.search_clicks')}</div>
+              <div className="SurveyorTile-value SurveyorTile-value--small">{t('dashboard.search_connect')}</div>
+            </button>
+          )}
         </div>
 
         <h3>{t('dashboard.audit_heading')}</h3>
